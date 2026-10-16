@@ -1,5 +1,6 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_groq import ChatGroq
+import os
+from langchain_openai import ChatOpenAI
 
 from philoagents.application.conversation_service.workflow.tools import tools
 from philoagents.config import settings
@@ -11,12 +12,19 @@ from philoagents.domain.prompts import (
 )
 
 
-def get_chat_model(temperature: float = 0.7, model_name: str = settings.GROQ_LLM_MODEL) -> ChatGroq:
-    return ChatGroq(
-        api_key=settings.GROQ_API_KEY,
-        model_name=model_name,
+
+def get_chat_model(temperature: float = 0.7) -> ChatOpenAI:
+    return ChatOpenAI(
+        api_key=os.environ["QWEN_API_KEY"],
+        base_url=os.getenv(
+            "QWEN_BASE_URL",
+            "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        ),
+        model=os.getenv("QWEN_MODEL", "qwen3.8-flash"),
         temperature=temperature,
+        extra_body={"enable_thinking": False},
     )
+
 
 
 def get_philosopher_response_chain():
@@ -36,7 +44,7 @@ def get_philosopher_response_chain():
 
 
 def get_conversation_summary_chain(summary: str = ""):
-    model = get_chat_model(model_name=settings.GROQ_LLM_MODEL_SUMMARY)
+    model = get_chat_model()
 
     summary_message = EXTEND_SUMMARY_PROMPT if summary else SUMMARY_PROMPT
 
@@ -52,7 +60,7 @@ def get_conversation_summary_chain(summary: str = ""):
 
 
 def get_context_summary_chain():
-    model = get_chat_model(model_name=settings.GROQ_LLM_MODEL_CONTEXT_SUMMARY)
+    model = get_chat_model()
     prompt = ChatPromptTemplate.from_messages(
         [
             ("human", CONTEXT_SUMMARY_PROMPT.prompt),

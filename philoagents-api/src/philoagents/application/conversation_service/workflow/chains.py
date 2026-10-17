@@ -34,8 +34,16 @@ def get_philosopher_response_chain():
 
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", system_message.prompt),
-            MessagesPlaceholder(variable_name="messages"),
+            
+    (
+    "system",
+    system_message.prompt
+    + "\n\nReply in the language of the user's latest message. "
+      "If the user writes Chinese, use Simplified Chinese. "
+      "If the user writes English, use English. "
+      "Remain in character and keep game dialogue concise."
+    ),
+
         ],
         template_format="jinja2",
     )

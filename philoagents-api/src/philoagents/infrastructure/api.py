@@ -1,10 +1,10 @@
 from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+import asyncio
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect,Query
 from fastapi.middleware.cors import CORSMiddleware
 from opik.integrations.langchain import OpikTracer
-from pydantic import BaseModel
-
+from pydantic import BaseModel,Field
+from .chat_history import save_turn, get_turns
 from philoagents.application.conversation_service.generate_response import (
     get_response,
     get_streaming_response,
@@ -43,6 +43,9 @@ app.add_middleware(
 class ChatMessage(BaseModel):
     message: str
     philosopher_id: str
+    player_id: str=Field(min_length=8,max_length=100)
+    philosopher_name: str=Field(min_length=8,max_length=100)
+
 
 
 @app.post("/chat")
@@ -58,7 +61,9 @@ async def chat(chat_message: ChatMessage):
             philosopher_perspective=philosopher.perspective,
             philosopher_style=philosopher.style,
             philosopher_context="",
+            player_id=chat_message.player_id
         )
+        await asyncio.to_thread()
         return {"response": response}
     except Exception as e:
         opik_tracer = OpikTracer()

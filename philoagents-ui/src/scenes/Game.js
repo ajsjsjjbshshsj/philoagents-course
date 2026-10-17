@@ -34,7 +34,7 @@ export class Game extends Scene
 
         this.setupControls(camera);
 
-        this.setupDialogueSystem();
+        
 
         this.dialogueBox = new DialogueBox(this);
         this.dialogueText = this.add

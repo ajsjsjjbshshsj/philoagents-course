@@ -20,6 +20,7 @@ async def get_response(
     philosopher_style: str,
     philosopher_context: str,
     new_thread: bool = False,
+    player_id:str="local",
 ) -> tuple[str, PhilosopherState]:
     """Run a conversation through the workflow graph.
 
@@ -52,9 +53,14 @@ async def get_response(
             graph = graph_builder.compile(checkpointer=checkpointer)
             opik_tracer = OpikTracer(graph=graph.get_graph(xray=True))
 
+
+            base_thread_id = f"{player_id}:{philosopher_id}"
             thread_id = (
-                philosopher_id if not new_thread else f"{philosopher_id}-{uuid.uuid4()}"
+                base_thread_id
+                if not new_thread
+                else f"{base_thread_id}:{uuid.uuid4()}"
             )
+
             config = {
                 "configurable": {"thread_id": thread_id},
                 "callbacks": [opik_tracer],
@@ -83,6 +89,7 @@ async def get_streaming_response(
     philosopher_style: str,
     philosopher_context: str,
     new_thread: bool = False,
+    player_id:str="local",
 ) -> AsyncGenerator[str, None]:
     """Run a conversation through the workflow graph with streaming response.
 
@@ -113,9 +120,14 @@ async def get_streaming_response(
             graph = graph_builder.compile(checkpointer=checkpointer)
             opik_tracer = OpikTracer(graph=graph.get_graph(xray=True))
 
+
+            base_thread_id = f"{player_id}:{philosopher_id}"
             thread_id = (
-                philosopher_id if not new_thread else f"{philosopher_id}-{uuid.uuid4()}"
+                base_thread_id
+                if not new_thread
+                else f"{base_thread_id}:{uuid.uuid4()}"
             )
+
             config = {
                 "configurable": {"thread_id": thread_id},
                 "callbacks": [opik_tracer],

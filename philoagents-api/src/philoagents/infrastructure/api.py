@@ -63,7 +63,13 @@ async def chat(chat_message: ChatMessage):
             philosopher_context="",
             player_id=chat_message.player_id
         )
-        await asyncio.to_thread()
+        await asyncio.to_thread(
+            save_turn,
+            chat_message.player_id,
+            chat_message.philosopher_id,
+            chat_message.message,
+            response,
+        )
         return {"response": response}
     except Exception as e:
         opik_tracer = OpikTracer()
@@ -80,12 +86,17 @@ async def websocket_chat(websocket: WebSocket):
         while True:
             data = await websocket.receive_json()
 
-            if "message" not in data or "philosopher_id" not in data:
-                await websocket.send_json(
-                    {
-                        "error": "Invalid message format. Required fields: 'message' and 'philosopher_id'"
-                    }
-                )
+
+            if (
+                    not isinstance(data, dict)
+                    or "message" not in data
+                    or "philosopher_id" not in data
+                    or not isinstance(data.get("player_id"), str)
+                    or not 8 <= len(data["player_id"]) <= 100
+            ):
+                await websocket.send_json({
+                    "error": "Missing or invalid message, philosopher_id or player_id"
+                })
                 continue
 
             try:
@@ -102,6 +113,7 @@ async def websocket_chat(websocket: WebSocket):
                     philosopher_perspective=philosopher.perspective,
                     philosopher_style=philosopher.style,
                     philosopher_context="",
+                    player_id=data["player_id"]
                 )
 
                 # Send initial message to indicate streaming has started
@@ -112,6 +124,16 @@ async def websocket_chat(websocket: WebSocket):
                 async for chunk in response_stream:
                     full_response += chunk
                     await websocket.send_json({"chunk": chunk})
+
+                # AI 完整回复生成后，保存到 MongoDB
+                if full_response.strip():
+                    await asyncio.to_thread(
+                        save_turn,
+                        data["player_id"],
+                        data["philosopher_id"],
+                        data["message"],
+                        full_response,
+                    )
 
                 await websocket.send_json(
                     {"response": full_response, "streaming": False}
@@ -125,6 +147,30 @@ async def websocket_chat(websocket: WebSocket):
 
     except WebSocketDisconnect:
         pass
+
+
+@app.get("/chat-history/{philosopher_id}")
+async def read_chat_history(
+        philosopher_id: str,
+        player_id: str = Query(..., min_length=8, max_length=100),
+):
+    """获取当前玩家与指定哲学家的历史对话。"""
+
+    try:
+        # 验证 NPC 是否存在
+        PhilosopherFactory.get_philosopher(philosopher_id)
+
+        turns = await asyncio.to_thread(
+            get_turns,
+            player_id,
+            philosopher_id,
+        )
+
+        return {"turns": turns}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.post("/reset-memory")

@@ -1,3 +1,4 @@
+import { getPlayerId } from '../playerId';
 class WebSocketApiService {
   constructor() {
     // Initialize connection-related properties
@@ -116,7 +117,8 @@ class WebSocketApiService {
 
       this.socket.send(JSON.stringify({
         message: message,
-        philosopher_id: philosopher.id
+        philosopher_id: philosopher.id,
+        player_id: getPlayerId()
       }));
     } catch (error) {
       console.error('Error sending message via WebSocket:', error);

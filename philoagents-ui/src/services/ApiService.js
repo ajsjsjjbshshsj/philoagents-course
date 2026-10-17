@@ -1,3 +1,4 @@
+import { getPlayerId } from '../playerId';
 class ApiService {
   constructor() {
     const isHttps = window.location.protocol === 'https:';
@@ -34,7 +35,8 @@ class ApiService {
     try {
       const data = await this.request('/chat', 'POST', {
         message,
-        philosopher_id: philosopher.id
+        philosopher_id: philosopher.id,
+        player_id: getPlayerId()
       });
       
       return data.response;
@@ -46,6 +48,26 @@ class ApiService {
 
   getFallbackResponse(philosopher) {
     return `I'm sorry, ${philosopher.name || 'the philosopher'} is unavailable at the moment. Please try again later.`;
+  }
+
+  async getChatHistory(philosopherId) {
+    const playerId = getPlayerId();
+
+    const url =
+        `${this.apiUrl}/chat-history/` +
+        `${encodeURIComponent(philosopherId)}` +
+        `?player_id=${encodeURIComponent(playerId)}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(
+          `读取聊天记录失败：HTTP ${response.status}`
+      );
+    }
+
+    const data = await response.json();
+    return data.turns;
   }
 
   async resetMemory() {

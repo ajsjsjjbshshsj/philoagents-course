@@ -1,3 +1,4 @@
+import { createHistoryPanel } from '../chatHistory';
 import ApiService from '../services/ApiService';
 import WebSocketApiService from '../services/WebSocketApiService';
 import { t } from '../i18n';
@@ -27,8 +28,15 @@ class DialogueManager {
   
   
   initialize(dialogueBox) {
-    this.dialogueBox = dialogueBox;
 
+    this.dialogueBox = dialogueBox;
+    if(!this.hasSetupListeners)
+    {
+      this.setupKeyboardListeners();
+      this.createChineseInput();
+      createHistoryPanel(this.scene);
+      this.hasSetupListeners = true;
+    }
     if (!this.hasSetupListeners) {
       this.setupKeyboardListeners();
       this.createChineseInput();

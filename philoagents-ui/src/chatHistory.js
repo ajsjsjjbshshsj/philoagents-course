@@ -50,8 +50,12 @@ export function createHistoryPanel(scene) {
     const picker = document.createElement('select');
     picker.style.padding = '10px';
 
-    // 从当前游戏中的 NPC 列表创建选项
+    // 从当前游戏中的 NPC 列表创建选项（带 defaultMessage 的 NPC 不能聊天，后端也不认识它们）
     for (const npc of scene.philosophers) {
+        if (npc.defaultMessage) {
+            continue;
+        }
+
         const option = document.createElement('option');
         option.value = npc.id;
         option.textContent = npc.name;

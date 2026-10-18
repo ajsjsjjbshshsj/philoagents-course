@@ -17,12 +17,16 @@ class WebSocketApiService {
   }
 
   determineWebSocketBaseUrl() {
+    if (window.PHILOAGENTS_WS_URL) {
+      return window.PHILOAGENTS_WS_URL;
+    }
+
     const isHttps = window.location.protocol === 'https:';
     
     if (isHttps) {
       console.log('Using GitHub Codespaces');
       const currentHostname = window.location.hostname;
-      return `ws://${currentHostname.replace('8080', '8000')}`;
+      return `wss://${currentHostname.replace('8080', '8000')}`;
     }
     
     return 'ws://localhost:8000';

@@ -1,6 +1,11 @@
 import { getPlayerId } from '../playerId';
 class ApiService {
   constructor() {
+    if (window.PHILOAGENTS_API_URL) {
+      this.apiUrl = window.PHILOAGENTS_API_URL;
+      return;
+    }
+
     const isHttps = window.location.protocol === 'https:';
     
     if (isHttps) {
@@ -76,7 +81,8 @@ class ApiService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ player_id: getPlayerId() })
       });
       
       if (!response.ok) {

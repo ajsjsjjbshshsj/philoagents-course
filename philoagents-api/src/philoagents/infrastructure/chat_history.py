@@ -1,12 +1,27 @@
-
 from datetime import datetime, timezone
+from functools import lru_cache
 
-from pymongo import MongoClient
+from pymongo import ASCENDING
 
 from philoagents.config import settings
+from philoagents.infrastructure.mongo.database import get_database
 
 
-COLLECTION_NAME = "chat_history"
+@lru_cache(maxsize=1)
+def _collection():
+    return get_database()[settings.MONGO_CHAT_HISTORY_COLLECTION]
+
+
+def ensure_indexes() -> None:
+    """The history panel always reads one player's one NPC, newest first."""
+    _collection().create_index(
+        [
+            ("player_id", ASCENDING),
+            ("philosopher_id", ASCENDING),
+            ("created_at", ASCENDING),
+        ],
+        name="player_philosopher_time",
+    )
 
 
 def save_turn(
@@ -25,9 +40,7 @@ def save_turn(
         "created_at": datetime.now(timezone.utc),
     }
 
-    with MongoClient(settings.MONGO_URI) as client:
-        collection = client[settings.MONGO_DB_NAME][COLLECTION_NAME]
-        collection.insert_one(document)
+    _collection().insert_one(document)
 
 
 def get_turns(
@@ -37,25 +50,23 @@ def get_turns(
 ) -> list[dict]:
     """查询某位玩家与某位 NPC 最近的聊天记录。"""
 
-    with MongoClient(settings.MONGO_URI) as client:
-        collection = client[settings.MONGO_DB_NAME][COLLECTION_NAME]
-
-        documents = list(
-            collection.find(
-                {
-                    "player_id": player_id,
-                    "philosopher_id": philosopher_id,
-                },
-                {
-                    "_id": 0,
-                    "user_message": 1,
-                    "assistant_message": 1,
-                    "created_at": 1,
-                },
-            )
-            .sort("_id", -1)
-            .limit(limit)
+    documents = list(
+        _collection()
+        .find(
+            {
+                "player_id": player_id,
+                "philosopher_id": philosopher_id,
+            },
+            {
+                "_id": 0,
+                "user_message": 1,
+                "assistant_message": 1,
+                "created_at": 1,
+            },
         )
+        .sort("_id", -1)
+        .limit(limit)
+    )
 
     documents.reverse()
 

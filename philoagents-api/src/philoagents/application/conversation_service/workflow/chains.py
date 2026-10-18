@@ -1,54 +1,31 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-import os
 from langchain_openai import ChatOpenAI
 
-from philoagents.application.conversation_service.workflow.tools import tools
+from philoagents.application.conversation_service.workflow.tools import get_tools
 from philoagents.config import settings
 from philoagents.domain.prompts import (
     CONTEXT_SUMMARY_PROMPT,
     EXTEND_SUMMARY_PROMPT,
-    PHILOSOPHER_CHARACTER_CARD,
     SUMMARY_PROMPT,
+    get_philosopher_prompt,
 )
 
 
-
 def get_chat_model(temperature: float = 0.7) -> ChatOpenAI:
+    if not settings.QWEN_API_KEY:
+        raise RuntimeError("QWEN_API_KEY is not set. The philosopher cannot answer.")
+
     return ChatOpenAI(
-        api_key=os.environ["QWEN_API_KEY"],
-        base_url=os.getenv(
-            "QWEN_BASE_URL",
-            "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-        ),
-        model=os.getenv("QWEN_MODEL", "qwen3.8-flash"),
+        api_key=settings.QWEN_API_KEY,
+        base_url=settings.QWEN_BASE_URL,
+        model=settings.QWEN_MODEL,
         temperature=temperature,
         extra_body={"enable_thinking": False},
     )
 
 
-
 def get_philosopher_response_chain():
-    model = get_chat_model()
-    model = model.bind_tools(tools)
-    system_message = PHILOSOPHER_CHARACTER_CARD
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            
-    (
-    "system",
-    system_message.prompt
-    + "\n\nReply in the language of the user's latest message. "
-      "If the user writes Chinese, use Simplified Chinese. "
-      "If the user writes English, use English. "
-      "Remain in character and keep game dialogue concise."
-    ),
-
-        ],
-        template_format="jinja2",
-    )
-
-    return prompt | model
+    return get_philosopher_prompt() | get_chat_model().bind_tools(get_tools())
 
 
 def get_conversation_summary_chain(summary: str = ""):

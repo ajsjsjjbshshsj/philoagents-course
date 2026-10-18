@@ -1,55 +1,97 @@
-from contextlib import asynccontextmanager
 import asyncio
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect,Query
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from opik.integrations.langchain import OpikTracer
-from pydantic import BaseModel,Field
-from .chat_history import save_turn, get_turns
+from pydantic import BaseModel, Field, ValidationError
+
+from .chat_history import ensure_indexes, get_turns, save_turn
+from .opik_utils import configure, tracing_enabled
+from .rate_limit import allow
 from philoagents.application.conversation_service.generate_response import (
     get_response,
     get_streaming_response,
+    shutdown_workflow_graph,
 )
 from philoagents.application.conversation_service.reset_conversation import (
     reset_conversation_state,
 )
+from philoagents.config import settings
+from philoagents.domain.exceptions import (
+    PhilosopherContextNotFound,
+    PhilosopherNameNotFound,
+    PhilosopherPerspectiveNotFound,
+    PhilosopherStyleNotFound,
+)
 from philoagents.domain.philosopher_factory import PhilosopherFactory
 
-from .opik_utils import configure
-
 configure()
+
+
+def flush_tracing() -> None:
+    if tracing_enabled():
+        OpikTracer().flush()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handles startup and shutdown events for the API."""
-    # Startup code (if any) goes here
+    await asyncio.to_thread(ensure_indexes)
     yield
-    # Shutdown code goes here
-    opik_tracer = OpikTracer()
-    opik_tracer.flush()
+    await shutdown_workflow_graph()
+    flush_tracing()
 
 
 app = FastAPI(lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_origins = settings.cors_origins
+if _origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_origins,
+        # A wildcard plus credentials is rejected by browsers, so never send both.
+        allow_credentials="*" not in _origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 class ChatMessage(BaseModel):
-    message: str
-    philosopher_id: str
-    player_id: str=Field(min_length=8,max_length=100)
-    philosopher_name: str=Field(min_length=8,max_length=100)
+    message: str = Field(min_length=1, max_length=settings.MAX_MESSAGE_CHARS)
+    philosopher_id: str = Field(min_length=1, max_length=64)
+    player_id: str = Field(min_length=8, max_length=100)
 
+
+class ResetRequest(BaseModel):
+    player_id: str = Field(min_length=8, max_length=100)
+
+
+def to_http_error(exc: Exception) -> HTTPException:
+    if isinstance(
+        exc,
+        (
+            PhilosopherNameNotFound,
+            PhilosopherPerspectiveNotFound,
+            PhilosopherStyleNotFound,
+            PhilosopherContextNotFound,
+        ),
+    ):
+        return HTTPException(status_code=404, detail=str(exc))
+
+    return HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/chat")
 async def chat(chat_message: ChatMessage):
+    allowed, retry_after = allow(f"chat:{chat_message.player_id}")
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many messages. Wait before sending another one.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     try:
         philosopher_factory = PhilosopherFactory()
         philosopher = philosopher_factory.get_philosopher(chat_message.philosopher_id)
@@ -72,10 +114,7 @@ async def chat(chat_message: ChatMessage):
         )
         return {"response": response}
     except Exception as e:
-        opik_tracer = OpikTracer()
-        opik_tracer.flush()
-
-        raise HTTPException(status_code=500, detail=str(e))
+        raise to_http_error(e)
 
 
 @app.websocket("/ws/chat")
@@ -86,34 +125,38 @@ async def websocket_chat(websocket: WebSocket):
         while True:
             data = await websocket.receive_json()
 
-
-            if (
-                    not isinstance(data, dict)
-                    or "message" not in data
-                    or "philosopher_id" not in data
-                    or not isinstance(data.get("player_id"), str)
-                    or not 8 <= len(data["player_id"]) <= 100
-            ):
+            try:
+                payload = ChatMessage.model_validate(data)
+            except ValidationError:
                 await websocket.send_json({
-                    "error": "Missing or invalid message, philosopher_id or player_id"
+                    "error": (
+                        "message, philosopher_id and a 8-100 character player_id are required"
+                    )
+                })
+                continue
+
+            allowed, retry_after = allow(f"chat:{payload.player_id}")
+            if not allowed:
+                await websocket.send_json({
+                    "error": f"Too many messages. Try again in {retry_after}s."
                 })
                 continue
 
             try:
                 philosopher_factory = PhilosopherFactory()
                 philosopher = philosopher_factory.get_philosopher(
-                    data["philosopher_id"]
+                    payload.philosopher_id
                 )
 
                 # Use streaming response instead of get_response
                 response_stream = get_streaming_response(
-                    messages=data["message"],
-                    philosopher_id=data["philosopher_id"],
+                    messages=payload.message,
+                    philosopher_id=payload.philosopher_id,
                     philosopher_name=philosopher.name,
                     philosopher_perspective=philosopher.perspective,
                     philosopher_style=philosopher.style,
                     philosopher_context="",
-                    player_id=data["player_id"]
+                    player_id=payload.player_id
                 )
 
                 # Send initial message to indicate streaming has started
@@ -129,9 +172,9 @@ async def websocket_chat(websocket: WebSocket):
                 if full_response.strip():
                     await asyncio.to_thread(
                         save_turn,
-                        data["player_id"],
-                        data["philosopher_id"],
-                        data["message"],
+                        payload.player_id,
+                        payload.philosopher_id,
+                        payload.message,
                         full_response,
                     )
 
@@ -140,9 +183,6 @@ async def websocket_chat(websocket: WebSocket):
                 )
 
             except Exception as e:
-                opik_tracer = OpikTracer()
-                opik_tracer.flush()
-
                 await websocket.send_json({"error": str(e)})
 
     except WebSocketDisconnect:
@@ -158,7 +198,7 @@ async def read_chat_history(
 
     try:
         # 验证 NPC 是否存在
-        PhilosopherFactory.get_philosopher(philosopher_id)
+        PhilosopherFactory().get_philosopher(philosopher_id)
 
         turns = await asyncio.to_thread(
             get_turns,
@@ -169,22 +209,22 @@ async def read_chat_history(
         return {"turns": turns}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise to_http_error(e)
 
 
 @app.post("/reset-memory")
-async def reset_conversation():
-    """Resets the conversation state. It deletes the two collections needed for keeping LangGraph state in MongoDB.
+async def reset_conversation(payload: ResetRequest):
+    """Clears one player's conversation state.
 
-    Raises:
-        HTTPException: If there is an error resetting the conversation state.
+    It used to drop the checkpoint collections outright, which reset every player in the
+    database at once. Only the caller's own threads are removed now, so no secret is
+    needed: the worst a caller can delete is the history of the player_id they present.
+
     Returns:
-        dict: A dictionary containing the result of the reset operation.
+        dict: the player and how many documents each collection lost.
     """
     try:
-        result = await reset_conversation_state()
-        return result
+        return await asyncio.to_thread(reset_conversation_state, payload.player_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     MAX_MESSAGE_CHARS: int = 2000
     RATE_LIMIT_MAX_MESSAGES: int = 20
     RATE_LIMIT_WINDOW_SECONDS: int = 60
+    # Session minting is keyed on client IP, so it needs headroom for a shared network.
+    RATE_LIMIT_MAX_SESSIONS: int = 60
+
+    # --- Session authentication ---
+    # Empty means the API accepts unauthenticated calls, which is only acceptable on a
+    # laptop: a client-supplied player_id is trivially rotated, so the rate limit keyed on
+    # it stops nobody. Set this before publishing the game anywhere reachable.
+    SESSION_SECRET: str = ""
+    SESSION_TTL_SECONDS: int = 12 * 3600
 
     # --- Comet ML & Opik Configuration ---
     COMET_API_KEY: str | None = Field(
@@ -68,6 +77,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def auth_enabled(self) -> bool:
+        return bool(self.SESSION_SECRET)
 
 
 settings = Settings()

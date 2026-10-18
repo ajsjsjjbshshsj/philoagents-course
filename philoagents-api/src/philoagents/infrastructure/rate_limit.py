@@ -27,15 +27,20 @@ def _prune(now: float, window: int) -> None:
         _recent.popitem(last=False)
 
 
-def allow(key: str) -> tuple[bool, int]:
+def allow(key: str, limit: int | None = None) -> tuple[bool, int]:
     """Consume a slot for `key`.
+
+    Args:
+        key: identity the budget is charged to. Callers must pass something the client
+            cannot mint at will, or the limit only punishes honest players.
+        limit: overrides the chat budget, for endpoints with their own ceiling.
 
     Returns:
         (allowed, retry_after_seconds). retry_after is 0 when the request is allowed.
     """
     now = time.monotonic()
     window = settings.RATE_LIMIT_WINDOW_SECONDS
-    limit = settings.RATE_LIMIT_MAX_MESSAGES
+    budget = settings.RATE_LIMIT_MAX_MESSAGES if limit is None else limit
 
     with _lock:
         stamps = _recent.get(key)
@@ -49,7 +54,7 @@ def allow(key: str) -> tuple[bool, int]:
         while stamps and stamps[0] <= cutoff:
             stamps.pop(0)
 
-        if len(stamps) >= limit:
+        if len(stamps) >= budget:
             return False, max(1, int(stamps[0] - cutoff) + 1)
 
         stamps.append(now)

@@ -105,14 +105,27 @@ But, in case you want to deploy the code, you'll need to setup the following ser
 ### Deploy notes for this fork
 
 * The app reads `MONGO_URI`, not `MONGODB_URI`. `docker-compose.yml` already uses the right name.
+* **Set `SESSION_SECRET` before publishing anywhere reachable.** With it the API signs a session
+  token at `POST /session` and takes the player's identity from that signature, so `/chat`,
+  `/chat-history`, `/reset-memory` and `/ws/chat` answer `401` without one. With it empty every
+  endpoint is open and the per-player limit below is decoration: the browser picks its own
+  `player_id`, so a script just keeps picking new ones. The UI caches the token in
+  `localStorage` and re-mints it when the server rejects it, so rotating the secret only signs
+  players out. There are still no accounts: anyone who knows a player's UUID can claim it at
+  `/session` and inherit that save game.
 * `CORS_ORIGINS` must list the origin the game is actually served from, or the browser blocks every call.
-* The UI hardcodes `http://localhost:8000` / `ws://localhost:8000`. For any other host, set
-  `window.PHILOAGENTS_API_URL` and `window.PHILOAGENTS_WS_URL` in `philoagents-ui/index.html`
-  **before** the bundle loads (no trailing slash). Without a WebSocket TLS proxy keep the UI on
-  plain `http:`, because the client uses `ws://` on http and `wss://` on https.
-* `/reset-memory` now needs a `player_id` in the body and only clears that player's memory.
+* The UI resolves the API origin from `window.PHILOAGENTS_API_URL` / `window.PHILOAGENTS_WS_URL`,
+  set in `philoagents-ui/index.html` **before** the bundle loads (no trailing slash); it falls
+  back to `localhost:8000` only on plain http. Because the token rides in an `Authorization`
+  header, `allow_headers` lists that header explicitly instead of `*`. Keep the UI on the same
+  scheme as its socket: `wss://` needs a TLS-terminating proxy.
+* `/reset-memory` clears the authenticated caller and ignores any `player_id` in the body, so one
+  player can no longer wipe another by naming them.
 * Per player the API takes `RATE_LIMIT_MAX_MESSAGES` messages per `RATE_LIMIT_WINDOW_SECONDS`
-  and rejects anything longer than `MAX_MESSAGE_CHARS` with a 422.
+  and rejects anything longer than `MAX_MESSAGE_CHARS` with a 422. Session minting is limited
+  per client IP by `RATE_LIMIT_MAX_SESSIONS` - raise it behind a reverse proxy, where every
+  visitor shares one address.
+* Hard stop, independent of this code: set a spending cap and an alert in the DashScope console.
 
 # 🎯 Getting Started
 

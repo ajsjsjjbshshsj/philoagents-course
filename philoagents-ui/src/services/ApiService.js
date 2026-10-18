@@ -1,38 +1,36 @@
 import { getPlayerId } from '../playerId';
+import { httpBaseUrl } from './apiBase';
+import { authHeaders, forgetSession, getSession } from './session';
+
 class ApiService {
   constructor() {
-    if (window.PHILOAGENTS_API_URL) {
-      this.apiUrl = window.PHILOAGENTS_API_URL;
-      return;
-    }
-
-    const isHttps = window.location.protocol === 'https:';
-    
-    if (isHttps) {
-      console.log('Using GitHub Codespaces');
-      const currentHostname = window.location.hostname;
-      this.apiUrl = `https://${currentHostname.replace('8080', '8000')}`;
-    } else {
-      this.apiUrl = 'http://localhost:8000';
-    }
+    this.apiUrl = httpBaseUrl();
   }
 
-  async request(endpoint, method, data) {
+  async request(endpoint, method, data, retried = false) {
     const url = `${this.apiUrl}${endpoint}`;
     const options = {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: data ? JSON.stringify(data) : undefined,
+      // player_id is still sent for the benefit of a server running without
+      // SESSION_SECRET; an authenticated one takes the identity from the token instead.
+      headers: await authHeaders(),
+      body: data ? JSON.stringify({ ...data, player_id: getPlayerId() }) : undefined,
     };
 
     const response = await fetch(url, options);
-    
+
+    if (response.status === 401 && !retried) {
+      // A rotated server secret invalidates every stored token; mint one and try again
+      // rather than leaving the player stuck on a dead session.
+      forgetSession();
+      await getSession(true);
+      return this.request(endpoint, method, data, true);
+    }
+
     if (!response.ok) {
       throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
-    
+
     return response.json();
   }
 
@@ -40,10 +38,9 @@ class ApiService {
     try {
       const data = await this.request('/chat', 'POST', {
         message,
-        philosopher_id: philosopher.id,
-        player_id: getPlayerId()
+        philosopher_id: philosopher.id
       });
-      
+
       return data.response;
     } catch (error) {
       console.error('Error sending message to API:', error);
@@ -56,40 +53,18 @@ class ApiService {
   }
 
   async getChatHistory(philosopherId) {
-    const playerId = getPlayerId();
-
     const url =
-        `${this.apiUrl}/chat-history/` +
+        `/chat-history/` +
         `${encodeURIComponent(philosopherId)}` +
-        `?player_id=${encodeURIComponent(playerId)}`;
+        `?player_id=${encodeURIComponent(getPlayerId())}`;
 
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(
-          `读取聊天记录失败：HTTP ${response.status}`
-      );
-    }
-
-    const data = await response.json();
+    const data = await this.request(url, 'GET');
     return data.turns;
   }
 
   async resetMemory() {
     try {
-      const response = await fetch(`${this.apiUrl}/reset-memory`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ player_id: getPlayerId() })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to reset memory');
-      }
-      
-      return await response.json();
+      return await this.request('/reset-memory', 'POST', {});
     } catch (error) {
       console.error('Error resetting memory:', error);
       throw error;
@@ -97,4 +72,4 @@ class ApiService {
   }
 }
 
-export default new ApiService(); 
+export default new ApiService();

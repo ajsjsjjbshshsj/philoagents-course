@@ -11,3 +11,9 @@ export function getPlayerId() {
 
     return id;
 }
+
+export function setPlayerId(id) {
+    if (id) {
+        localStorage.setItem(PLAYER_ID_KEY, id);
+    }
+}

@@ -86,9 +86,13 @@ Also, the course requires access to these cloud services. The authentication to 
 
 | Service | Purpose | Cost | Environment Variable | Setup Guide | Starting with Module |
 |---------|---------|------|---------------------|-------------| ---------------------|
-| [Groq](https://rebrand.ly/philoagents-groq) | LLM API that powers the agents | Free tier | `GROQ_API_KEY` | [Quick Start Guide](https://rebrand.ly/philoagents-groq-quickstart) | Module 1 |
+| Qwen (Aliyun DashScope) | LLM API that powers the agents, through the OpenAI-compatible endpoint | Pay-per-use | `QWEN_API_KEY` | [控制台开通](https://bailian.console.aliyun.com/) | Module 1 |
 | [Opik](https://rebrand.ly/philoagents-opik) | LLMOps | Free tier (Hosted on Comet - same API Key) | `COMET_API_KEY` | [Quick Start Guide](https://rebrand.ly/philoagents-opik-quickstart) | Module 5 |
 | [OpenAI API](https://openai.com/index/openai-api/) | LLM API used for evaluation | Pay-per-use | `OPENAI_API_KEY` | [Quick Start Guide](https://platform.openai.com/docs/quickstart) | Module 5 |
+
+This fork replaced the course's Groq calls with Qwen, so `GROQ_API_KEY` is only needed by the
+legacy `evaluation/` scripts, which still import `ChatGroq`. Without `COMET_API_KEY` the API
+still runs: prompts fall back to the local `prompts.py` and Opik tracing stays off.
 
 When working locally, the infrastructure is set up using Docker. Thus, you can use the default values found in the [config.py](philoagents-api/src/philoagents/config.py) file for all the infrastructure-related environment variables.
 
@@ -97,6 +101,18 @@ But, in case you want to deploy the code, you'll need to setup the following ser
 | Service | Purpose | Cost | Required Credentials | Setup Guide |
 |---------|---------|------|---------------------|-------------| 
 | [MongoDB](https://rebrand.ly/philoagents-mongodb) | Document database | Free tier | `MONGODB_URI` | 1. [Create a free MongoDB Atlas account](https://rebrand.ly/philoagents-mongodb-setup-1) <br> 2. [Create a Cluster](https://rebrand.ly/philoagents-mongodb-setup-2) </br> 3. [Add a Database User](https://rebrand.ly/philoagents-mongodb-setup-3) </br> 4. [Configure a Network Connection](https://rebrand.ly/philoagents-mongodb-setup-4) |
+
+### Deploy notes for this fork
+
+* The app reads `MONGO_URI`, not `MONGODB_URI`. `docker-compose.yml` already uses the right name.
+* `CORS_ORIGINS` must list the origin the game is actually served from, or the browser blocks every call.
+* The UI hardcodes `http://localhost:8000` / `ws://localhost:8000`. For any other host, set
+  `window.PHILOAGENTS_API_URL` and `window.PHILOAGENTS_WS_URL` in `philoagents-ui/index.html`
+  **before** the bundle loads (no trailing slash). Without a WebSocket TLS proxy keep the UI on
+  plain `http:`, because the client uses `ws://` on http and `wss://` on https.
+* `/reset-memory` now needs a `player_id` in the body and only clears that player's memory.
+* Per player the API takes `RATE_LIMIT_MAX_MESSAGES` messages per `RATE_LIMIT_WINDOW_SECONDS`
+  and rejects anything longer than `MAX_MESSAGE_CHARS` with a 422.
 
 # 🎯 Getting Started
 

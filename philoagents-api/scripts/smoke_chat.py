@@ -100,7 +100,7 @@ def main() -> None:
     assert second.status_code == 200, second.text
 
     other_player = new_player_id()
-    print(f"\n[6] a second player talks to the same NPC, for the reset check")
+    print("\n[6] a second player talks to the same NPC, for the reset check")
     rest_chat(other_player, "socrates", "你好，我是另一个人。")
 
     print("\n[7] retrieval-augmented turn for a philosopher with a corpus")

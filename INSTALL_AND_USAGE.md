@@ -227,7 +227,7 @@ make infrastructure-up
 We use Docker to set up the local infrastructure (Game UI, Agent API, MongoDB).
 
 > [!WARNING]
-> Before running the command below, ensure you do not have any processes running on ports `27017` (MongoDB), `8000` (Agent API) and `8080` (Game UI).
+> Before running the command below, ensure you do not have any processes running on ports `27017` (MongoDB), `8000` (Agent API) and `8088` (Game UI). The UI used to be published on `8080`; change that in `docker-compose.yml` and in `CORS_ORIGINS` together.
 
 From the root `philoagents-course` directory, to start the Docker infrastructure, run:
 ```bash
@@ -262,7 +262,7 @@ make create-long-term-memory
 
 Next, you can access the game by typing in your browser:
 ```
-http://localhost:8080
+http://localhost:8088
 ```
 Which will open the game UI, similar to the screenshot below:
 

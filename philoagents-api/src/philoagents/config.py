@@ -32,8 +32,11 @@ class Settings(BaseSettings):
     MONGO_CHAT_HISTORY_COLLECTION: str = "chat_history"
 
     # --- HTTP surface configuration ---
-    # Comma separated. "*" is only valid without credentials; browsers reject the pair.
-    CORS_ORIGINS: str = "http://localhost:8080,http://127.0.0.1:8080"
+    # Comma separated, and it must list the origin the UI is actually served from: compose
+    # publishes it on 8088, `npm run dev` on 8080. "*" is only valid without credentials.
+    CORS_ORIGINS: str = (
+        "http://localhost:8080,http://localhost:8088,http://127.0.0.1:8088"
+    )
     MAX_MESSAGE_CHARS: int = 2000
     RATE_LIMIT_MAX_MESSAGES: int = 20
     RATE_LIMIT_WINDOW_SECONDS: int = 60

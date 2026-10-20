@@ -58,7 +58,7 @@ export function createHistoryPanel(scene) {
 
         const option = document.createElement('option');
         option.value = npc.id;
-        option.textContent = npc.name;
+        option.textContent = npc.displayName;
         picker.appendChild(option);
     }
 

@@ -2,6 +2,16 @@
 const messages = {
   zh: {
     play: "开始游戏",
+    "philosopher.socrates": "苏格拉底",
+    "philosopher.plato": "柏拉图",
+    "philosopher.aristotle": "亚里士多德",
+    "philosopher.descartes": "笛卡尔",
+    "philosopher.leibniz": "莱布尼茨",
+    "philosopher.ada_lovelace": "阿达·洛夫莱斯",
+    "philosopher.turing": "图灵",
+    "philosopher.chomsky": "乔姆斯基",
+    "philosopher.searle": "塞尔",
+    "philosopher.dennett": "丹尼特",
     instructions: "操作说明",
     support: "支持原项目",
     language: "语言：中文（点击切换）",
@@ -34,15 +44,22 @@ const messages = {
   }
 };
 
+export function getLanguage() {
+  return localStorage.getItem("game_language") || "zh";
+}
+
 export function t(key) {
-  const lang = localStorage.getItem("game_language") || "zh";
-  return messages[lang]?.[key] || key;
+  return messages[getLanguage()]?.[key] || key;
+}
+
+// 哲学家在本语言下的显示名；没有配置时（如英文）沿用传入的默认名
+export function philosopherName(id, defaultName) {
+  return messages[getLanguage()]?.[`philosopher.${id}`] || defaultName;
 }
 
 export function toggleLanguage() {
-  const lang = localStorage.getItem("game_language") || "zh";
   localStorage.setItem(
     "game_language",
-    lang === "zh" ? "en" : "zh"
+    getLanguage() === "zh" ? "en" : "zh"
   );
 }
